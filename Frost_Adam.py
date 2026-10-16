@@ -10,6 +10,9 @@ import math
 import numpy as np # does math stuff    
 import json # interfaces with .json input file 
 import matplotlib.pyplot as plt # does plotting stuff
+
+DEBUG = False
+
 #%% helper functions (some imported from class documentation)
 def load_json(json_filename):
     # extract json dictionary info
@@ -43,12 +46,12 @@ def calc_control_point_locations(nodes):
     control_points = sums*0.5
     return control_points
 
-def populate_a(nodes, N_nodes, N_panels, lengths, cpoints):
+def calc_a(nodes, N_nodes, N_panels, lengths, cpoints):
     A=np.zeros((N_nodes,N_nodes))
     # loop through control points
     for i in range(N_panels):
         x, y = cpoints[i]
-        # panel i endpoints (nodes, not control points) for the normal vector
+        # panel i for the normal vector
         xi, yi = nodes[i]
         xi1, yi1 = nodes[i+1]
         li = lengths[i]
@@ -88,6 +91,46 @@ def calc_P(x, y, lj, xj, yj, xj1, yj1):
     P = (1/(2*math.pi*(lj**2)))*(mat1@mat2)
     return P
 
+def calc_B(nodes, N_nodes, lengths):
+    # pretty straightforward ngl
+    B = np.zeros((N_nodes,1))
+    for i in range(N_nodes-1):
+        xi, yi = nodes[i]
+        xi1, yi1 = nodes[i+1]
+        li = lengths[i]
+        B[i] = ((yi1-yi)*math.cos(alpha_rad) - ((xi1-xi)*math.sin(alpha_rad)))/li
+    return B
+        
+def calc_gamma(A, B, vel_inf):
+    # even more straightforward
+    A_inv = np.linalg.inv(A)
+    return A_inv@(vel_inf*B)
+
+def calc_cl(N_panels, lengths, gamma, vel_inf, c=1.0):
+    # coordinates are normalized, but i'll keep a dummy c in here
+    cl = 0.0
+    for i in range(N_panels):
+        # add to cl for each value in the sum
+        li = lengths[i]
+        gami = gamma[i]
+        gami1 = gamma[i+1]
+        cl += (li/c)*(gami+gami1)/vel_inf
+    return cl
+
+def calc_cmle(lengths, nodes, N_panels, gamma, vel_inf, alpha_rad, c=1.0):
+    cmle = 0.0
+    for i in range(N_panels):
+        li = lengths[i]
+        xi, yi = nodes[i]
+        xi1, yi1 = nodes[i+1]
+        gami = gamma[i]
+        gami1 = gamma[i+1]
+        # calculate the two main bits individually
+        fracx = (2*xi*gami + (xi*gami1) + (xi1*gami) + (2*xi1*gami1))/(c*vel_inf)
+        fracy = (2*yi*gami + (yi*gami1) + (yi1*gami) + (2*yi1*gami1))/(c*vel_inf)
+        cmle += (li/c) * (fracx*math.cos(alpha_rad) + (fracy*math.sin(alpha_rad)))
+    return -(1/3)*cmle
+
 #%% main
 if __name__ == "__main__":
     json_filename = "input.json" 
@@ -97,7 +140,13 @@ if __name__ == "__main__":
     N_panels = N_nodes - 1
     lengths = calc_panel_lengths(nodes)
     cpoints = calc_control_point_locations(nodes)
-    A = populate_a(nodes, N_nodes, N_panels, lengths, cpoints)
+    A = calc_a(nodes, N_nodes, N_panels, lengths, cpoints)
+    B = calc_B(nodes, N_nodes, lengths)
+    gamma = calc_gamma(A, B, vel_inf)
+    Cl = calc_cl(N_panels, lengths, gamma, vel_inf)[0]
+    Cmle = calc_cmle(lengths, nodes, N_panels, gamma, vel_inf, alpha_rad)[0]
+    # simple transformation to cmc4
+    Cmc4 = Cmle + (0.25*Cl*math.cos(alpha_rad))
 
 #%% final printout
     # print final information
@@ -105,9 +154,15 @@ if __name__ == "__main__":
     print(f"\nfile:\n{geometry}")
     print(f"\nalpha [deg]:\n{np.rad2deg(alpha_rad):.1f}")
     print(f"\nFreestream velocity:\n{vel_inf:.1f}")
-    print(f"\nnodes:\n{nodes}")
+    if DEBUG:
+        print(f"\nnodes:\n{nodes}")
     print(f"\nN (nodes):\n{N_nodes}")
     print(f"\nN (panels):\n{N_panels}")
     print('\n============CALCULATION RESULTS=================')
-    print(f'\nA:\n{A}')
-
+    if DEBUG:
+        print(f'\nA matrix:\n{A}')
+        print(f'\nB matrix:\n{B}')
+        print(f'\ngamma matrix:\n{gamma}')
+    print(f'\nCl: {Cl}\n')
+    print(f'\nCmLE: {Cmle}\n')
+    print(f'Cmc4: {Cmc4}\n')
