@@ -47,15 +47,13 @@ def populate_a(nodes, N_nodes, N_panels, lengths, cpoints):
     A=np.zeros((N_nodes,N_nodes))
     # loop through control points
     for i in range(N_panels):
-        xi, yi = cpoints[i]
-        if i == N_panels-1:
-            xi1, yi1 = cpoints[0]
-        else:
-            xi1, yi1 = cpoints[i+1]
+        x, y = cpoints[i]
+        # panel i endpoints (nodes, not control points) for the normal vector
+        xi, yi = nodes[i]
+        xi1, yi1 = nodes[i+1]
         li = lengths[i]
-        # get P for each panel
+        # get P for each panel, evaluated at control point i
         for j in range(N_panels):
-            x, y = cpoints[j]
             xj, yj = nodes[j]
             xj1, yj1 = nodes[j+1]
             lj = lengths[j]
@@ -63,6 +61,9 @@ def populate_a(nodes, N_nodes, N_panels, lengths, cpoints):
             # add panel effect to A (incorporating n vector calculation)
             A[i][j] += ((xi1-xi)/li)*Pj[1][0] - (((yi1-yi)/li)*Pj[0][0])
             A[i][j+1] += ((xi1-xi)/li)*Pj[1][1] - (((yi1-yi)/li)*Pj[0][1])
+    # Kutta condition: gamma at the trailing edge sums to zero
+    A[N_nodes-1][0] = 1.0
+    A[N_nodes-1][N_nodes-1] = 1.0
     return A
 
 def calc_P(x, y, lj, xj, yj, xj1, yj1):
