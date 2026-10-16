@@ -6,12 +6,11 @@ Created on Tue Oct 13 22:57:25 2026
 @author: Adam Frost
 """
 
-#%% imported from class documentation
-
+import math
 import numpy as np # does math stuff    
 import json # interfaces with .json input file 
 import matplotlib.pyplot as plt # does plotting stuff
-
+#%% helper functions (some imported from class documentation)
 def load_json(json_filename):
     # extract json dictionary info
     json_string = open(json_filename).read() # read it as txt
@@ -32,17 +31,61 @@ def get_nodes_from_geom(geometry):
     nodes = np.array(info)
     return nodes
 
-def calc_panel_lengths(N_panels, etcetera):
-    lengths = np.zeros((N_panels,1)) # array of panel lengths
+def calc_panel_lengths(nodes):
     ## calculate the panel lengths ##
+    diffs = np.array(nodes[1:]-nodes[:-1])
+    lengths = np.linalg.norm(diffs, axis=1)
+    return lengths
 
-def calc_control_point_locations(N_panels, etcetera):
-    control_point_locations = np.zeros((N_panels-1,2)) # array of control points 
+def calc_control_point_locations(nodes): 
     ## calculate the control point locations ##
-#%% self-made functions
+    sums = np.array(nodes[:-1]+nodes[1:])
+    control_points = sums*0.5
+    return control_points
 
+def populate_a(nodes, N_nodes, N_panels, lengths, cpoints):
+    A=np.zeros((N_nodes,N_nodes))
+    # loop through control points
+    for i in range(N_panels):
+        xi, yi = cpoints[i]
+        if i == N_panels-1:
+            xi1, yi1 = cpoints[0]
+        else:
+            xi1, yi1 = cpoints[i+1]
+        li = lengths[i]
+        # get P for each panel
+        for j in range(N_panels):
+            x, y = cpoints[j]
+            xj, yj = nodes[j]
+            xj1, yj1 = nodes[j+1]
+            lj = lengths[j]
+            Pj = calc_P(x, y, lj, xj, yj, xj1, yj1)
+            # add panel effect to A (incorporating n vector calculation)
+            A[i][j] += ((xi1-xi)/li)*Pj[1][0] - (((yi1-yi)/li)*Pj[0][0])
+            A[i][j+1] += ((xi1-xi)/li)*Pj[1][1] - (((yi1-yi)/li)*Pj[0][1])
+    return A
 
-
+def calc_P(x, y, lj, xj, yj, xj1, yj1):
+    # get goofy greek letters
+    # start with xi and eta
+    node_arr = np.array([[xj1-xj, yj1-yj],
+                         [-(yj1-yj), xj1-xj]])
+    cp_arr = np.array([[x-xj],
+                       [y-yj]])
+    point_trans = (1/lj)*(node_arr@cp_arr)
+    xi, eta = point_trans.flatten()
+    # then grab phi
+    phi = math.atan2(eta*lj, eta**2 + xi**2 - (xi*lj))
+    # and finally psi!
+    log_internals = ((xi**2 + eta**2) / ((xi-lj)**2 + eta**2))
+    psi = 0.5*(math.log(log_internals))
+    # then calculate final P value
+    mat1 = np.array([[xj1-xj,   -(yj1-yj)],
+                     [(yj1-yj), xj1-xj]])
+    mat2 = np.array([[(lj-xi)*phi + eta*psi,        xi*phi - (eta*psi)],
+                     [eta*phi - ((lj-xi)*psi) - lj, -eta*phi - (xi*psi) + lj]])
+    P = (1/(2*math.pi*(lj**2)))*(mat1@mat2)
+    return P
 
 #%% main
 if __name__ == "__main__":
@@ -51,12 +94,10 @@ if __name__ == "__main__":
     nodes = get_nodes_from_geom(geometry)
     N_nodes = len(nodes)
     N_panels = N_nodes - 1
-    
-    # calculate panel lengths
-    diffs = nodes[1:]-nodes[:-1]
-    lengths = np.linalg.norm(diffs, axis=1)
-    
-    
+    lengths = calc_panel_lengths(nodes)
+    cpoints = calc_control_point_locations(nodes)
+    A = populate_a(nodes, N_nodes, N_panels, lengths, cpoints)
+
 #%% final printout
     # print final information
     print('============GEOMETRY INFORMATION================')
@@ -66,5 +107,6 @@ if __name__ == "__main__":
     print(f"\nnodes:\n{nodes}")
     print(f"\nN (nodes):\n{N_nodes}")
     print(f"\nN (panels):\n{N_panels}")
-    print('============CALCULATION RESULTS=================')
+    print('\n============CALCULATION RESULTS=================')
+    print(f'\nA:\n{A}')
 
