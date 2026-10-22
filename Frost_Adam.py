@@ -7,9 +7,8 @@ Created on Tue Oct 13 22:57:25 2026
 """
 
 import math
-import numpy as np # does math stuff    
+import numpy as np # does math stuff
 import json # interfaces with .json input file 
-import matplotlib.pyplot as plt # does plotting stuff
 
 DEBUG = False
 
@@ -33,6 +32,25 @@ def get_nodes_from_geom(geometry):
     # now make the info list a numpy array 
     nodes = np.array(info)
     return nodes
+
+def calc_lift_moment_table(geometry, alpha_set, vel_inf):
+    ret_mat = [[r'$alpha$ ($^\circ$)', 'C_L', 'C_{m_{LE}}', 'C_{m_{c/4}}']]
+    alpha_set = np.array(alpha_set)
+    nodes = get_nodes_from_geom(geometry)
+    N_nodes = len(nodes)
+    N_panels = N_nodes - 1
+    lengths = calc_panel_lengths(nodes)
+    cpoints = calc_control_point_locations(nodes)
+    A = calc_a(nodes, N_nodes, N_panels, lengths, cpoints)
+    for alpha in alpha_set:
+        B = calc_B(nodes, N_nodes, lengths, alpha)
+        gamma = calc_gamma(A, B, vel_inf)
+        Cl = calc_cl(N_panels, lengths, gamma, vel_inf)[0]
+        Cmle = calc_cmle(lengths, nodes, N_panels, gamma, vel_inf, alpha)[0]
+        # simple transformation to cmc4
+        Cmc4 = Cmle + (0.25*Cl*math.cos(alpha))
+        ret_mat.append([np.rad2deg(alpha), Cl, Cmle, Cmc4])
+    return np.array(ret_mat)
 
 def calc_panel_lengths(nodes):
     ## calculate the panel lengths ##
@@ -91,7 +109,7 @@ def calc_P(x, y, lj, xj, yj, xj1, yj1):
     P = (1/(2*math.pi*(lj**2)))*(mat1@mat2)
     return P
 
-def calc_B(nodes, N_nodes, lengths):
+def calc_B(nodes, N_nodes, lengths, alpha_rad):
     # pretty straightforward ngl
     B = np.zeros((N_nodes,1))
     for i in range(N_nodes-1):
@@ -103,8 +121,7 @@ def calc_B(nodes, N_nodes, lengths):
         
 def calc_gamma(A, B, vel_inf):
     # even more straightforward
-    A_inv = np.linalg.inv(A)
-    return A_inv@(vel_inf*B)
+    return np.linalg.solve(A, vel_inf*B)
 
 def calc_cl(N_panels, lengths, gamma, vel_inf, c=1.0):
     # coordinates are normalized, but i'll keep a dummy c in here
@@ -141,7 +158,7 @@ if __name__ == "__main__":
     lengths = calc_panel_lengths(nodes)
     cpoints = calc_control_point_locations(nodes)
     A = calc_a(nodes, N_nodes, N_panels, lengths, cpoints)
-    B = calc_B(nodes, N_nodes, lengths)
+    B = calc_B(nodes, N_nodes, lengths, alpha_rad)
     gamma = calc_gamma(A, B, vel_inf)
     Cl = calc_cl(N_panels, lengths, gamma, vel_inf)[0]
     Cmle = calc_cmle(lengths, nodes, N_panels, gamma, vel_inf, alpha_rad)[0]
@@ -164,5 +181,6 @@ if __name__ == "__main__":
         print(f'\nB matrix:\n{B}')
         print(f'\ngamma matrix:\n{gamma}')
     print(f'\nCl: {Cl}\n')
-    print(f'\nCmLE: {Cmle}\n')
+    print(f'CmLE: {Cmle}\n')
     print(f'Cmc4: {Cmc4}\n')
+    print('*** For table/plot results, use table_plot.py ***')
