@@ -34,7 +34,7 @@ def get_nodes_from_geom(geometry):
     return nodes
 
 def calc_lift_moment_table(geometry, alpha_set, vel_inf):
-    ret_mat = [[r'$alpha$ ($^\circ$)', 'C_L', 'C_{m_{LE}}', 'C_{m_{c/4}}']]
+    ret_mat = [['alpha (circ)', 'CL', 'CmLE', 'Cmc4']]
     alpha_set = np.array(alpha_set)
     nodes = get_nodes_from_geom(geometry)
     N_nodes = len(nodes)
